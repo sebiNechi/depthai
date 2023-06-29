@@ -87,6 +87,8 @@ with dai.Device(pipeline) as device:
     detections = []
     frame = None
 
+    tracked_ids = {} # dictionary to keep track of each person
+
     def to_planar(arr: np.ndarray, shape: tuple) -> np.ndarray:
         return cv2.resize(arr, shape).transpose(2, 0, 1).flatten()
 
@@ -163,9 +165,16 @@ with dai.Device(pipeline) as device:
             cv2.putText(trackerFrame, t.status.name, (x1 + 10, y1 + 50), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
             cv2.rectangle(trackerFrame, (x1, y1), (x2, y2), color, cv2.FONT_HERSHEY_SIMPLEX)
 
+            # counting persons
+            if t.id not in tracked_ids:
+                tracked_ids[t.id] = True
+
         cv2.putText(trackerFrame, "Fps: {:.2f}".format(fps), (2, trackerFrame.shape[0] - 4), cv2.FONT_HERSHEY_TRIPLEX, 0.4, color)
+        cv2.putText(trackerFrame, "Persons: {}".format(len(tracked_ids)), (2, trackerFrame.shape[0] - 20), cv2.FONT_HERSHEY_TRIPLEX, 0.4, color)
 
         cv2.imshow("tracker", trackerFrame)
 
         if cv2.waitKey(1) == ord('q'):
             break
+
+print("Total persons detected: ", len(tracked_ids)) # printing the total number of detected persons
