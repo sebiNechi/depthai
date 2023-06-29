@@ -38,12 +38,9 @@ trackerOut.setStreamName("tracklets")
 nnOut.setStreamName("nn")
 
 # Properties
-xinFrame.setMaxDataSize(1920*1080*3)
+xinFrame.setMaxDataSize(1920 * 1080 * 3)
 
 manip.initialConfig.setResizeThumbnail(544, 320)
-# manip.initialConfig.setResize(384, 384)
-# manip.initialConfig.setKeepAspectRatio(False) #squash the image to not lose FOV
-# The NN model expects BGR input. By default ImageManip output type would be same as input (gray in this case)
 manip.initialConfig.setFrameType(dai.ImgFrame.Type.BGR888p)
 manip.inputImage.setBlocking(True)
 
@@ -56,9 +53,7 @@ objectTracker.inputTrackerFrame.setBlocking(True)
 objectTracker.inputDetectionFrame.setBlocking(True)
 objectTracker.inputDetections.setBlocking(True)
 objectTracker.setDetectionLabelsToTrack([1])  # track only person
-# possible tracking types: ZERO_TERM_COLOR_HISTOGRAM, ZERO_TERM_IMAGELESS, SHORT_TERM_IMAGELESS, SHORT_TERM_KCF
 objectTracker.setTrackerType(dai.TrackerType.ZERO_TERM_COLOR_HISTOGRAM)
-# take the smallest ID when new object is tracked, possible options: SMALLEST_ID, UNIQUE_ID
 objectTracker.setTrackerIdAssignmentPolicy(dai.TrackerIdAssignmentPolicy.SMALLEST_ID)
 
 # Linking
@@ -74,7 +69,6 @@ objectTracker.passthroughTrackerFrame.link(xlinkOut.input)
 
 # Connect and start the pipeline
 with dai.Device(pipeline) as device:
-
     qIn = device.getInputQueue(name="inFrame")
     trackerFrameQ = device.getOutputQueue(name="trackerFrame", maxSize=4)
     tracklets = device.getOutputQueue(name="tracklets", maxSize=4)
@@ -87,29 +81,38 @@ with dai.Device(pipeline) as device:
     detections = []
     frame = None
 
-    tracked_ids = {} # dictionary to keep track of each person
+    tracked_ids = {}  # dictionary to keep track of each person
 
     def to_planar(arr: np.ndarray, shape: tuple) -> np.ndarray:
         return cv2.resize(arr, shape).transpose(2, 0, 1).flatten()
 
-    # nn data, being the bounding box locations, are in <0..1> range - they need to be normalized with frame width/height
+
     def frameNorm(frame, bbox):
         normVals = np.full(len(bbox), frame.shape[0])
         normVals[::2] = frame.shape[1]
         return (np.clip(np.array(bbox), 0, 1) * normVals).astype(int)
 
+
     def displayFrame(name, frame):
         for detection in detections:
             bbox = frameNorm(frame, (detection.xmin, detection.ymin, detection.xmax, detection.ymax))
             cv2.rectangle(frame, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (255, 0, 0), 2)
-            cv2.putText(frame, labelMap[detection.label], (bbox[0] + 10, bbox[1] + 20), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
-            cv2.putText(frame, f"{int(detection.confidence * 100)}%", (bbox[0] + 10, bbox[1] + 40), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
+            cv2.putText(frame, labelMap[detection.label], (bbox[0] + 10, bbox[1] + 20), cv2.FONT_HERSHEY_TRIPLEX, 0.5,
+                        255)
+            cv2.putText(frame, f"{int(detection.confidence * 100)}%", (bbox[0] + 10, bbox[1] + 40),
+                        cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
         cv2.imshow(name, frame)
+
 
     cap = cv2.VideoCapture(args.videoPath)
     baseTs = time.monotonic()
     simulatedFps = 30
     inputFrameShape = (1920, 1080)
+
+    # Counting related initialization
+    last_seen = {}
+    current_people = set()
+    frame_disappear_threshold = 5  # Adjust this threshold as needed
 
     while cap.isOpened():
         read_correctly, frame = cap.read()
@@ -120,7 +123,7 @@ with dai.Device(pipeline) as device:
         img.setType(dai.ImgFrame.Type.BGR888p)
         img.setData(to_planar(frame, inputFrameShape))
         img.setTimestamp(baseTs)
-        baseTs += 1/simulatedFps
+        baseTs += 1 / simulatedFps
 
         img.setWidth(inputFrameShape[0])
         img.setHeight(inputFrameShape[1])
@@ -134,9 +137,9 @@ with dai.Device(pipeline) as device:
         manip = qManip.get()
         inDet = qDet.get()
 
-        counter+=1
+        counter += 1
         current_time = time.monotonic()
-        if (current_time - startTime) > 1 :
+        if (current_time - startTime) > 1:
             fps = counter / (current_time - startTime)
             counter = 0
             startTime = current_time
@@ -163,18 +166,28 @@ with dai.Device(pipeline) as device:
             cv2.putText(trackerFrame, str(label), (x1 + 10, y1 + 20), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
             cv2.putText(trackerFrame, f"ID: {[t.id]}", (x1 + 10, y1 + 35), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
             cv2.putText(trackerFrame, t.status.name, (x1 + 10, y1 + 50), cv2.FONT_HERSHEY_TRIPLEX, 0.5, 255)
-            cv2.rectangle(trackerFrame, (x1, y1), (x2, y2), color, cv2.FONT_HERSHEY_SIMPLEX)
 
+            cv2.rectangle(trackerFrame, (x1, y1), (x2, y2), color, 1)
             # counting persons
             if t.id not in tracked_ids:
                 tracked_ids[t.id] = True
+            # Add/update the detected person into last_seen
+            last_seen[t.id] = counter
+
+            # Add the detected person into current_people
+            current_people.add(t.id)
 
         cv2.putText(trackerFrame, "Fps: {:.2f}".format(fps), (2, trackerFrame.shape[0] - 4), cv2.FONT_HERSHEY_TRIPLEX, 0.4, color)
         cv2.putText(trackerFrame, "Persons: {}".format(len(tracked_ids)), (2, trackerFrame.shape[0] - 20), cv2.FONT_HERSHEY_TRIPLEX, 0.4, color)
-
         cv2.imshow("tracker", trackerFrame)
+        # Remove any person from current_people if they have not been seen for a while
+        disappeared_people = [id for id in current_people if (counter - last_seen[id]) > frame_disappear_threshold]
+        for id in disappeared_people:
+            current_people.remove(id)
+
+        print(f"Current count: {len(current_people)}")
+
+        displayFrame("tracker", trackerFrame)
 
         if cv2.waitKey(1) == ord('q'):
             break
-
-print("Total persons detected: ", len(tracked_ids)) # printing the total number of detected persons
