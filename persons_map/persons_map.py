@@ -9,8 +9,15 @@ import argparse
 
 labelMap = ["person", ""]
 
-nnPathDefault = str((Path(__file__).parent / Path('../depthai-python/examples/models/person-detection-retail-0013_openvino_2021.4_7shave.blob')).resolve().absolute())
-videoPathDefault = str((Path(__file__).parent / Path('../depthai-python/examples/models/blurred_crowd.mov')).resolve().absolute())
+videos = {
+    0: 'airport_crowd.mp4',
+    1: 'blurred_crowd.mov',
+    2: 'crosswalk_crowd.mp4',
+    3: 'blurred_crosswalk.mp4'
+}
+video = videos[3]
+nnPathDefault = str((Path(__file__).parent / Path('../../depthai-python/examples/models/person-detection-retail-0013_openvino_2021.4_7shave.blob')).resolve().absolute())
+videoPathDefault = str((Path(__file__).parent / Path(f'../../depthai-python/examples/models/{video}')).resolve().absolute())
 parser = argparse.ArgumentParser()
 parser.add_argument('-nnPath', help="Path to mobilenet detection network blob", default=nnPathDefault)
 parser.add_argument('-v', '--videoPath', help="Path to video frame", default=videoPathDefault)
